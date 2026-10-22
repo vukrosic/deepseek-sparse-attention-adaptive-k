@@ -19,7 +19,7 @@
 
 ## Knobs
 
-All in `toy/suite.py`. `toy/run.sh` sets the model above, sequences of 64 and DeepSeek sparse attention with a 60-step warm-up and a Muon-trained picker.
+All in `experiments/suite.py`. `experiments/run.sh` sets the model above, sequences of 64 and DeepSeek sparse attention with a 60-step warm-up and a Muon-trained picker.
 
 | knob | meaning |
 |---|---|
@@ -32,7 +32,7 @@ All in `toy/suite.py`. `toy/run.sh` sets the model above, sequences of 64 and De
 | `DSA_WIN=4` | the last 4 tokens are always kept as well |
 | `DSA_TRAIN=copy` | how the picker learns: `copy`, `copyall`, `sum`, `alt`, `anneal`, `switch`, `task` (see Step 2) |
 
-Command for every run: `cd toy && env [knobs] ./run.sh SEED`. Then `python3 summ.py` prints mean loss and tokens read per setting.
+Command for every run: `cd experiments && env [knobs] ./run.sh SEED`. Then `python3 summ.py` prints mean loss and tokens read per setting.
 
 ## Step 1: fixed top-k
 
@@ -155,6 +155,58 @@ In Steps 1–6 a token reads only about 2 blocks. DeepSeek reads 2,048 tokens, w
 | chosen, p = 0.85 | 1.472 | 1.419 | 1.437 | 1.443 | 32.1 |
 
 A chosen number of blocks reading 24–32 tokens matches a fixed 64 tokens (1.443–1.458 vs 1.449). Unlike Steps 3–5, the gain does not vanish at larger budgets here: it holds up to at least 16 blocks. Runs of one setting differ by up to 0.12 (fixed 16).
+
+## Step 8: the best minimum vs the context length (single tokens, p=0.5)
+
+Same model and training (260 steps). Context lengths 32, 64, 128, 256, 512. Above 16 tokens, the copy, repeat-2-back, find-a-partner and count tasks fill the whole text, so they get harder as texts get longer; the fact and sort tasks stay the same short texts.
+
+Chosen size: allowed sizes = the minimum, then powers of 2 up to the context length. Fixed size: every token reads the same k tokens (DeepSeek).
+
+`cd experiments && ./context_sweep.sh LENGTH SEED "minimums" "fixed sizes"`, then `python3 context_summ.py LENGTH`.
+
+"vs fixed" = loss minus the loss of DeepSeek's fixed amount reading the same number of tokens on average (straight line between the two nearest fixed sizes on a log scale of tokens read). Negative = better than fixed.
+
+| length | setting | s0 | s1 | mean | tokens read | vs fixed |
+|---|---|---|---|---|---|---|
+| 32 | fixed 4 / 8 / 16 | 1.441 / 1.343 / 1.296 | 1.492 / 1.347 / 1.324 | 1.467 / 1.345 / 1.310 | 3.9 / 7.4 / 12.7 | |
+| 32 | min 1 | 1.881 | 1.794 | 1.837 | 2.3 | +0.269 |
+| 32 | min 2 | 1.502 | 1.463 | 1.482 | 3.1 | −0.029 |
+| 32 | min 4 | 1.399 | 1.393 | 1.396 | 4.9 | −0.028 |
+| 32 | min 8 | 1.328 | 1.342 | 1.335 | 7.9 | −0.006 |
+| 64 | fixed 4 / 8 / 16 | 1.478 / 1.331 / 1.278 | 1.452 / 1.292 / 1.263 | 1.465 / 1.312 / 1.271 | 4.0 / 7.7 / 14.3 | |
+| 64 | min 1 | 1.543 | 1.588 | 1.565 | 3.8 | +0.088 |
+| 64 | min 2 | 1.387 | 1.375 | 1.381 | 4.1 | −0.078 |
+| 64 | min 4 | 1.331 | 1.317 | 1.324 | 5.9 | −0.050 |
+| 64 | min 8 | 1.282 | 1.274 | 1.278 | 9.7 | −0.019 |
+| 128 | fixed 4 / 8 / 16 | 1.953 / 1.714 / 1.585 | 1.956 / 1.653 / 1.578 | 1.955 / 1.684 / 1.582 | 4.0 / 7.8 / 15.2 | |
+| 128 | min 1 | 1.808 | 1.719 | 1.764 | 5.9 | −0.033 |
+| 128 | min 2 | 1.729 | 1.590 | 1.659 | 7.1 | −0.063 |
+| 128 | min 4 | 1.628 | 1.544 | 1.586 | 8.3 | −0.089 |
+| 128 | min 8 | 1.571 | 1.492 | 1.532 | 12.8 | −0.076 |
+| 256 | fixed 16 / 32 | 2.236 / 1.844 | 1.848 / 1.699 | 2.042 / 1.772 | 15.6 / 30.3 | |
+| 256 | min 1 | 2.134 | 1.929 | 2.032 | 16.3 | +0.008 |
+| 256 | min 2 | 1.882 | 1.914 | 1.898 | 17.8 | −0.090 |
+| 256 | min 4 | 1.890 | 1.745 | 1.817 | 21.4 | −0.096 |
+| 256 | min 8 | 1.775 | 1.728 | 1.751 | 22.0 | −0.151 |
+| 256 | min 16 | 1.779 | 1.737 | 1.758 | 29.3 | −0.028 |
+| 512 | fixed 32 / 64 | 3.051 / 2.816 | – | | 31.1 / 60.4 | |
+| 512 | min 8 | 2.871 | – | | 52.4 | +0.004 (s0) |
+| 512 | min 16 | 2.787 | 2.358 | 2.573 | 56.2 | −0.058 (s0) |
+| 512 | min 32 | 2.474 | 2.238 | 2.356 | 66.9 | −0.294 (s0) |
+| 512 | min 64 | 2.683 | – | | 88.5 | +0.002 (s0) |
+
+At 512 only seed 0 has fixed runs (8 minutes per run), so "vs fixed" uses seed 0. Seed 1 confirms min 32 beats min 16 (2.238 vs 2.358).
+
+Best minimum: 2 (32 tokens; 2 and 4 tie), 2 (64), 4 (128), 8 (256), 32 (512). A straight line in log-log fitted to these points has slope 1.0: best minimum ≈ length / 24.
+
+Where the gain comes from (per-task loss, 512 tokens, min 8 → 16 → 32): copy 4.51 → 3.35 → 2.64, repeat 2 back 1.89 → 1.36 → 1.03, find a partner 5.16 → 4.60 → 3.97. Count (5.2–5.4) and the short tasks do not change. These are look-up tasks; at longer lengths the picker misses the right token more often, and a larger minimum still includes it.
+
+Predictions made before running, and what happened:
+- From 32–128, the copy-task gap between min 1 and min 4 shrank (0.64, 0.35, 0.20); predicted 0.11 at 256. Measured 0.23: **wrong**, the gap stops shrinking.
+- From best minimums 2, 2, 4, 8 (rule length / 32): predicted min 16 is no better than min 8 at 256. Measured 1.758 vs 1.751: **right**.
+- Same rule predicted a best minimum of 16 at 512. Measured 32: **wrong by a factor of 2**, which moved the fitted rule to length / 24.
+
+Caveats: at longer lengths the model learns badly in 260 steps (loss rises from 1.3 to 2.4), and runs of one setting differ by up to 0.4 at 256–512 tokens.
 
 ## Literature
 
