@@ -4,7 +4,7 @@
 
 **In DeepSeek sparse attention, every token reads the same 2,048 earlier tokens. Let each token decide how many it reads instead.** A token continuing a common phrase needs only a few. A token answering a question about something far back needs many.
 
-**Each token then reads about half as many tokens, for the same quality.** This was measured in a small model, with texts of 128 tokens.
+**Each token then reads about half as many tokens, for the same quality.** This was measured in a small model, with texts of 128 and 256 tokens.
 
 **In DeepSeek-V3.2, that would save 10–40% of the attention compute.** This is calculated, not measured. The saving is largest for texts of a few thousand tokens. At 128K tokens it is smallest, because there most of the cost is scoring every earlier token, which this change does not reduce.
 
@@ -62,7 +62,7 @@ A GPU loads earlier tokens in **blocks** of neighbouring tokens, 64 or 128 at a 
 
 ## What it saves: about half the reading, so 10–40% of attention compute in DeepSeek-V3.2
 
-In a small model with 128-token texts, queries that choose read **24 tokens on average**, where DeepSeek's fixed amount reads 49, with almost the same loss ([Results](#results)).
+In a small model, queries that choose read **about half as many tokens** as DeepSeek's fixed amount, with about the same loss: 24 instead of 49 with 128-token texts, 50 instead of 97 with 256-token texts ([Results](#results)).
 
 If the same halving held in DeepSeek-V3.2, each query would read about **1,024 tokens instead of 2,048**. I calculated what that saves from DeepSeek-V3.2's published sizes (128 attention heads, 64 picker heads):
 
@@ -80,7 +80,7 @@ Billion operations of attention per new token, per layer. Normal attention, whic
 
 > [!WARNING]
 > This is a calculation, not a measurement:
-> - the halving was measured only in a small model with short texts;
+> - the halving was measured only in a small model with texts of 128 and 256 tokens (at 512 the small model learns too little to tell);
 > - it counts operations, not time (the picker runs in FP8, so its share of the time is smaller and the time saving larger);
 > - longer texts may need a larger minimum reading ([below](#grow-the-minimum-with-the-context-length-the-best-minimum-is-about-124-of-it)), which would shrink the saving.
 
@@ -103,6 +103,18 @@ Texts of 128 tokens, cut into 32 blocks of 4 tokens:
 ![Letting each token choose how much to read cuts the reading in half, with the same loss](blocks_long.png)
 
 > **Less than half the reading, and the loss is only 0.009 higher.** That gap is smaller than the difference between two runs of the same setting.
+
+Texts twice as long, 256 tokens (64 blocks of 4), 2 runs each:
+
+| Version | Tokens each token reads, on average | Loss |
+|---|---|---|
+| Normal attention (reads everything) | 128.7 | 1.676 |
+| Same number for every token, as in DeepSeek | 97.4 (32 blocks) | 1.688 |
+| **Each token chooses** | **50.2 (13 blocks)** | **1.676** |
+
+> **With texts twice as long, it still reads about half as many tokens, and does as well as reading everything.**
+
+With texts of 512 tokens the small model learns too little to tell: reading 113 tokens, 195 tokens or all 512 all gave about the same loss (2.93–2.96), and choosing gave 2.99 (1 run each).
 
 ### When reading in GPU blocks, let each token choose, because a fixed amount loses a lot
 

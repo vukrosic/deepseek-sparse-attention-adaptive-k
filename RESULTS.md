@@ -156,6 +156,26 @@ In Steps 1–6 a token reads only about 2 blocks. DeepSeek reads 2,048 tokens, w
 
 A chosen number of blocks reading 24–32 tokens matches a fixed 64 tokens (1.443–1.458 vs 1.449). Unlike Steps 3–5, the gain does not vanish at larger budgets here: it holds up to at least 16 blocks. Runs of one setting differ by up to 0.12 (fixed 16).
 
+## Step 7b: the same at 256 and 512 tokens (blocks of 4)
+
+`cd experiments && ./blocks_sweep.sh SEQ SEED "chosen p values" "fixed sizes"` ("full" = normal attention); `python3 blocks_summ.py SEQ` prints the table. Chosen sizes = any whole number of blocks up to SEQ. About 2 min per run at 256 tokens, 6–7 min at 512.
+
+256 tokens (64 blocks of 4):
+
+| size | s0 | s1 | mean | tokens read |
+|---|---|---|---|---|
+| normal attention | 1.713 | 1.640 | 1.676 | 128.7 |
+| fixed 32 (8 blocks) | 1.855 | 1.815 | 1.835 | 30.2 |
+| fixed 64 (16 blocks) | 1.776 | 1.705 | 1.741 | 56.6 |
+| fixed 128 (32 blocks) | 1.744 | 1.632 | 1.688 | 97.4 |
+| chosen, p = 0.5 | 1.785 | 1.835 | 1.810 | 29.1 |
+| chosen, p = 0.7 | 1.727 | 1.626 | 1.676 | 50.2 |
+| chosen, p = 0.85 | 1.676 | 1.617 | 1.646 | 69.2 |
+
+Chosen p = 0.7 reads 50 tokens and ties normal attention (1.676), slightly better than fixed 128 reading 97 (1.688). Chosen p = 0.85 reading 69 is the best row (1.646). At the smallest size (about 30 tokens) choosing ties the fixed amount (1.810 vs 1.835, within noise). Runs of one setting differ by up to 0.11.
+
+512 tokens, seed 0 only: normal attention 2.962 (258 read), fixed 256 2.931 (195), fixed 128 2.943 (113), chosen p = 0.7 2.990 (120). Reading everything is no better than reading 113 tokens, so the model has not learned to use the long text in 260 steps, and this length cannot separate the versions.
+
 ## Step 8: the best minimum vs the context length (single tokens, p=0.5)
 
 Same model and training (260 steps). Context lengths 32, 64, 128, 256, 512. Above 16 tokens, the copy, repeat-2-back, find-a-partner and count tasks fill the whole text, so they get harder as texts get longer; the fact and sort tasks stay the same short texts.
