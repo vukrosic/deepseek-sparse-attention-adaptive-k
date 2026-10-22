@@ -123,23 +123,21 @@ LONG_FULL = 1.418
 LONG_FIXED = [(15.1, 1.643), (28.4, 1.535), (48.8, 1.449)]       # fixed 16, 32, 64 tokens in blocks of 4
 LONG_CHOSEN = [(13.6, 1.573), (24.2, 1.458), (32.1, 1.443)]      # p = 0.5, 0.7, 0.85; any whole number of blocks
 fig, ax = plt.subplots(figsize=(11.5, 6.4))
-fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.2)
-frame(fig, "Letting each token choose how much to read cuts the reading in half, with the same loss",
-      "DeepSeek sparse attention, sequences of 128 tokens = 32 blocks of 4. Mean of 3 runs; runs of one setting differ by up to about 0.1.",
-      "Same number: every token reads 4, 8 or 16 blocks. Each token chooses: it keeps the top blocks that hold a share p of its picker's attention,\n"
-      "any whole number of blocks. Real GPU kernels read blocks of 64 or 128 tokens; blocks of 4 stand in for them in this small model.")
-ax.plot([a for a, _ in LONG_FIXED], [b for _, b in LONG_FIXED], color=BLUE, marker="o", ms=7, lw=2, label="same number of blocks for every token")
-ax.plot([a for a, _ in LONG_CHOSEN], [b for _, b in LONG_CHOSEN], color=ORANGE, marker="o", ms=7, lw=2, label="each token chooses its number of blocks")
-for (a, b), lab in zip(LONG_FIXED, ("16 tokens", "32 tokens", "64 tokens")):
-    ax.annotate(f"{lab}: {b:.3f}", (a, b), textcoords="offset points", xytext=(8, 6), fontsize=9.5, color=BLUE)
-for (a, b), lab in zip(LONG_CHOSEN, ("p=0.5", "p=0.7", "p=0.85")):
-    ax.annotate(f"{lab}: {b:.3f}", (a, b), textcoords="offset points", xytext=(-10, -4) if lab == "p=0.5" else (-6, -17), fontsize=9.5, color=ORANGE,
-                ha="right" if lab == "p=0.5" else "center")
+fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.17)
+frame(fig, "Each token picking how many tokens to look at: half as many, same loss",
+      "Texts of 128 tokens. Earlier tokens are looked at in groups of 4, the way GPUs load them. Average of 3 runs.",
+      "Loss = how wrong the model's next-token guesses are; lower is better.")
+ax.plot([a for a, _ in LONG_FIXED], [b for _, b in LONG_FIXED], color=BLUE, marker="o", ms=8, lw=2.5, label="DeepSeek: every token looks at the same number")
+ax.plot([a for a, _ in LONG_CHOSEN], [b for _, b in LONG_CHOSEN], color=ORANGE, marker="o", ms=8, lw=2.5, label="each token picks how many")
+for a, b in LONG_FIXED: ax.annotate(f"{a:.0f}", (a, b), textcoords="offset points", xytext=(9, 4), fontsize=10.5, color=BLUE)
+for a, b in LONG_CHOSEN: ax.annotate(f"{a:.0f}", (a, b), textcoords="offset points", xytext=(-9, -14), ha="right", fontsize=10.5, color=ORANGE)
+ax.annotate("", xy=(25.5, 1.452), xytext=(47.3, 1.452), arrowprops=dict(arrowstyle="->", color=INK, lw=1.6))
+ax.text(36.5, 1.462, "half as many tokens,\nsame loss", ha="center", va="bottom", fontsize=11, color=INK)
 ax.axhline(LONG_FULL, color=GRAY, lw=1.5, ls="--")
-ax.text(64, LONG_FULL - 0.006, f"normal attention {LONG_FULL}", ha="right", va="top", fontsize=10, color=INK2)
+ax.text(65, LONG_FULL - 0.006, "normal attention: looks at all of them", ha="right", va="top", fontsize=10, color=INK2)
 ax.set_xlim(0, 66); ax.set_ylim(1.38, 1.68)
-ax.set_xlabel("tokens read per token, on average (of up to 128)"); ax.set_ylabel("loss (lower is better)")
-ax.legend(loc="upper right", fontsize=10)
+ax.set_xlabel("earlier tokens each token looks at, on average"); ax.set_ylabel("loss")
+ax.legend(loc="upper right", fontsize=10.5)
 fig.savefig("blocks_long.png", dpi=170); plt.close(fig)
 # 6. the best minimum grows with the context length
 import math
