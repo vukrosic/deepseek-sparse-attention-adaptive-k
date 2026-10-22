@@ -182,4 +182,30 @@ ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32, 64]); ax.set_xt
 ax.set_xlim(0.8, 100); ax.set_ylim(-0.3, 0.33)
 ax.set_xlabel("minimum tokens each token must read"); ax.set_ylabel("loss below DeepSeek's fixed amount")
 fig.savefig("minimum_by_length.png", dpi=170); plt.close(fig)
-print("wrote main_result.png rules.png sizes.png picker_training.png blocks_long.png minimum_scaling.png minimum_by_length.png")
+# 8. calculated attention compute in DeepSeek-V3.2 (config.json sizes), if each token reads half of DeepSeek's 2,048 on average
+MAIN = 2 * 128 * (576 + 512)   # operations per earlier token read: 128 heads, 576-wide keys (512 latent + 64 position), 512-wide values
+PICK = 2 * 64 * 128            # operations per earlier token scored by the picker: 64 heads of width 128
+CTX = [8192, 16384, 32768, 65536, 131072]
+fig, ax = plt.subplots(figsize=(11.5, 6.6))
+fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.2)
+frame(fig, "Halving the reading saves 40% of attention compute at 8K tokens, 10% at 128K",
+      "Calculated, not measured: DeepSeek-V3.2 attention, one layer, one new token. Assumes each token reads 1,024 on average instead of 2,048.",
+      "The picker must still score every earlier token, so its cost (gray) grows with the text and is the same in both versions; only the reading (color) halves.\n"
+      "Normal attention, which reads every token, would cost 2.3 (8K) to 36.5 (128K) billion operations. Counts operations, not time: the picker runs in FP8.")
+w = 0.36
+for i, L in enumerate(CTX):
+    pick = PICK * L / 1e9
+    for j, (k, c) in enumerate([(2048, BLUE), (1024, ORANGE)]):
+        x = i + (j - 0.5) * (w + 0.03); read = MAIN * k / 1e9
+        ax.bar(x, pick, w, color=GRAY, edgecolor="white", linewidth=2)
+        ax.bar(x, read, w, bottom=pick, color=c, edgecolor="white", linewidth=2)
+        ax.text(x, pick + read + 0.04, f"{pick + read:.2f}", ha="center", fontsize=10, color=INK)
+    full, half = PICK * L + MAIN * 2048, PICK * L + MAIN * 1024
+    ax.text(i + 0.5 * (w + 0.03), (half / 1e9) + 0.22, f"−{1 - half / full:.0%}", ha="center", fontsize=11.5, fontweight="bold", color=ORANGE)
+ax.set_xticks(range(len(CTX))); ax.set_xticklabels(["8K", "16K", "32K", "64K", "128K"])
+ax.bar(0, 0, color=BLUE, label="reading 2,048 tokens (DeepSeek)"); ax.bar(0, 0, color=ORANGE, label="reading 1,024 on average (each token chooses)")
+ax.bar(0, 0, color=GRAY, label="picker scoring every earlier token")
+ax.legend(loc="upper left", fontsize=10.5); ax.set_ylim(0, 3.2); ax.grid(axis="x", visible=False)
+ax.set_xlabel("text length (tokens)"); ax.set_ylabel("billion operations per new token, per layer")
+fig.savefig("compute_saving.png", dpi=170); plt.close(fig)
+print("wrote main_result.png rules.png sizes.png picker_training.png blocks_long.png minimum_scaling.png minimum_by_length.png compute_saving.png")

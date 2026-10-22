@@ -1,51 +1,72 @@
 # In DeepSeek sparse attention, let each token decide how many tokens to read
 
-> [!IMPORTANT]
-> **When each token decides how many earlier tokens to read, DeepSeek sparse attention reads about half as many tokens for almost the same quality.**
+## Long texts are expensive because every token reads every earlier token
 
-It fits how GPUs work. A GPU loads earlier tokens in **blocks** of neighbouring tokens, 64 or 128 at a time. So each token picks **whole blocks**, and the number it reads is always a whole number of blocks: for example 1,024, 1,536 or 2,048 tokens with blocks of 128.
+When a language model writes the next token, it looks back at the earlier tokens of the text to decide what comes next. This is **attention**. The token doing the looking is called the **query**.
 
-![Letting each token choose how much to read cuts the reading in half, with the same loss](blocks_long.png)
+Normal attention reads **every** earlier token. In a 128,000-token text, each new token reads 128,000 earlier tokens, in every layer. The cost grows with the length of the text, and for long texts attention becomes most of the work.
 
 ---
 
-## DeepSeek sparse attention reads the same number of tokens for every token
+## DeepSeek sparse attention reads only 2,048 tokens, the same number for every token
 
-When a token looks back at earlier tokens, attention reads **every one of them**. The token doing the looking is called the **query**. For long texts this is the slowest part of a language model.
+**DeepSeek sparse attention** ([DeepSeek-V3.2](https://arxiv.org/abs/2512.02556)) reads only some of the earlier tokens, in two steps:
 
-**DeepSeek sparse attention** ([DeepSeek-V3.2](https://arxiv.org/abs/2512.02556)) reads only some of them:
-
-1. A small network called the **picker** (DeepSeek calls it the lightning indexer) scores every earlier token.
+1. A small network called the **picker** (DeepSeek calls it the lightning indexer) gives every earlier token a score: how useful it probably is to the query. Scoring a token costs about **17 times less** than reading it.
 2. Attention reads only the **top-k**: the 2,048 highest-scored tokens.
-3. Every query gets **the same 2,048**, whatever it needs.
 
-But queries need different amounts:
+Every query reads **the same 2,048** tokens, whatever it needs. But queries need different amounts:
 
 - Continuing a common phrase needs **the last word or two**.
 - Answering a question about something said far back needs **a lot of text**.
 
-> **The question:** if each query decides how many tokens to read, does the model do better for the same amount of reading?
+> **The question:** if each query decides how many tokens to read, can it read fewer tokens for the same quality?
 
 ---
 
-## The change: each token chooses how many blocks of tokens to read
+## The change: each token reads only as many tokens as its picker scores point to
 
-The picker learns by **copying where the real attention looks**. So its scores show, for each token, whether its attention points at one place or is spread over many.
+The picker learns by **copying where attention looks**. So its scores show, for each query, whether attention points at one place or is spread over many places.
 
-I use that to set how much each token reads:
+I use that to set how much each query reads:
 
-1. The token takes its highest-scored blocks, one by one.
-2. It stops once they hold a set share of the picker's total score, for example **70%**.
+1. Take the highest-scored tokens, one by one.
+2. Stop once they hold a set share of the picker's total score, for example **70%**.
 
-| The picker's scores for a token | What the token reads |
+| The picker's scores for a query | What the query reads |
 |---|---|
-| One block holds most of the score | just that block |
-| The score is spread over many blocks | many blocks |
+| One token holds most of the score | just that token and a few more |
+| The score is spread over many tokens | many tokens |
 
 This is called **top-p**, like top-p sampling of words.
 
-> [!NOTE]
-> In this small model a block is **4 tokens**. It stands in for the **64- or 128-token** blocks of real GPU kernels.
+A GPU loads earlier tokens in **blocks** of neighbouring tokens, 64 or 128 at a time, so in the main version each query picks **whole blocks**, not single tokens. In this small model a block is **4 tokens**.
+
+---
+
+## What it saves: about half the reading, so 10–40% of attention compute in DeepSeek-V3.2
+
+In a small model with 128-token texts, queries that choose read **24 tokens on average**, where DeepSeek's fixed amount reads 49, with almost the same loss ([Results](#results)).
+
+If the same halving held in DeepSeek-V3.2, each query would read about **1,024 tokens instead of 2,048**. I calculated what that saves from DeepSeek-V3.2's published sizes (128 attention heads, 64 picker heads):
+
+![Halving the reading saves 40% of attention compute at 8K tokens, 10% at 128K](compute_saving.png)
+
+| Text length | DeepSeek (2,048 tokens) | Each token chooses (1,024 on average) | Saved |
+|---|---|---|---|
+| 8K | 0.70 | **0.42** | **40%** |
+| 32K | 1.11 | **0.82** | **26%** |
+| 128K | 2.72 | **2.43** | **10%** |
+
+Billion operations of attention per new token, per layer. Normal attention, which reads everything: 2.3 at 8K, 36.5 at 128K.
+
+> **The saving is largest for texts of a few thousand tokens.** In longer texts the picker, which must still score every earlier token, becomes most of the cost, and this change does not make the picker cheaper.
+
+> [!WARNING]
+> This is a calculation, not a measurement:
+> - the halving was measured only in a small model with short texts;
+> - it counts operations, not time (the picker runs in FP8, so its share of the time is smaller and the time saving larger);
+> - longer texts may need a larger minimum reading ([below](#grow-the-minimum-with-the-context-length-the-best-minimum-is-about-124-of-it)), which would shrink the saving.
 
 ---
 
@@ -62,6 +83,8 @@ Texts of 128 tokens, cut into 32 blocks of 4 tokens:
 | Normal attention (reads everything) | 64.6 | 1.418 |
 | Same number for every token, as in DeepSeek | 48.8 (16 blocks) | 1.449 |
 | **Each token chooses** | **24.2 (6 blocks)** | **1.458** |
+
+![Letting each token choose how much to read cuts the reading in half, with the same loss](blocks_long.png)
 
 > **Less than half the reading, and the loss is only 0.009 higher.** That gap is smaller than the difference between two runs of the same setting.
 

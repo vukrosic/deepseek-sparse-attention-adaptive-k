@@ -208,6 +208,28 @@ Predictions made before running, and what happened:
 
 Caveats: at longer lengths the model learns badly in 260 steps (loss rises from 1.3 to 2.4), and runs of one setting differ by up to 0.4 at 256–512 tokens.
 
+## Step 9: calculated attention compute in DeepSeek-V3.2 (not measured)
+
+Sizes from DeepSeek-V3.2-Exp `config.json`: 128 attention heads, `kv_lora_rank` 512, `qk_rope_head_dim` 64, picker (`index_n_heads`) 64 heads of width 128, top-k 2,048.
+
+Per new token, per layer, per earlier token:
+
+- reading it (MLA in absorbed form: 576-wide key score + 512-wide value): 2 × 128 × (576 + 512) = 278,528 operations;
+- scoring it with the picker: 2 × 64 × 128 = 16,384 operations (17× less).
+
+Cost = 16,384 × L + 278,528 × k, where L is the text length and k the tokens read.
+
+| L | normal attention (k = L) | DeepSeek (k = 2,048) | each token chooses (k = 1,024) | saved |
+|---|---|---|---|---|
+| 4,096 | 1.14 | 0.638 | 0.352 | 45% |
+| 8,192 | 2.28 | 0.705 | 0.419 | 40% |
+| 16,384 | 4.56 | 0.839 | 0.554 | 34% |
+| 32,768 | 9.13 | 1.107 | 0.822 | 26% |
+| 65,536 | 18.25 | 1.644 | 1.359 | 17% |
+| 131,072 | 36.51 | 2.718 | 2.433 | 10% |
+
+Billion operations. k = 1,024 assumes the halving from step 7 carries over. Operations, not time: the picker runs in FP8. Chart: `compute_saving.png` (chart.py, chart 8).
+
 ## Literature
 
 - DeepSeek-V3.2 ([arXiv 2512.02556](https://arxiv.org/abs/2512.02556)): DeepSeek sparse attention. A lightning indexer (ReLU, trained by KL to the dense attention, dense warm-up first) picks a fixed top-k of single tokens per query (2,048 in the released model).
