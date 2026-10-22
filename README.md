@@ -18,9 +18,11 @@ My question: if each query decides how many tokens to read, does the model do be
 
 ## What I changed
 
-The picker is trained to copy where the real attention looks. So its scores also show how spread out each query's attention is.
+The picker learns by copying where the real attention looks. So its scores show, for each token, whether its attention points at one place or is spread over many.
 
-Each query keeps its top-scored blocks until they hold a share p of the picker's probability (**top-p**). A query whose attention sits in one place reads few blocks; a query whose attention is spread out reads many. In this small model a block is 4 tokens, standing in for the 64- or 128-token blocks of real GPU kernels.
+I use that to set how much each token reads. The token takes its highest-scored blocks one by one and stops once they hold a set share of the picker's total score, for example 70%. If one block holds most of the score, the token reads just that block. If the score is spread out, it reads many blocks. This is called **top-p**, like top-p sampling of words.
+
+In this small model a block is 4 tokens. It stands in for the 64- or 128-token blocks of real GPU kernels.
 
 ## Results
 
@@ -64,7 +66,9 @@ This is a tiny model with texts of 64 and 128 tokens and blocks of 4 tokens. Eac
 
 ## Is this new?
 
-[NSA](https://arxiv.org/abs/2502.11089) reads blocks, with the same count for every query. [Twilight](https://arxiv.org/abs/2502.02770) and [RTPurbo](https://arxiv.org/abs/2605.16928) let each query choose with top-p, over single tokens and without a minimum. I found no work on a per-query count of whole GPU blocks, or on the larger gain it gives with blocks.
+Some parts already exist. [NSA](https://arxiv.org/abs/2502.11089) reads whole blocks, but every token reads the same number of them. [Twilight](https://arxiv.org/abs/2502.02770) and [RTPurbo](https://arxiv.org/abs/2605.16928) let each token choose how many tokens to read, but they pick single tokens, not blocks, and have no minimum.
+
+I found no work where each token chooses a number of whole GPU blocks, or that shows the choice helps most with blocks.
 
 ## Setup
 
