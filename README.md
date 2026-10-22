@@ -1,5 +1,21 @@
 # In DeepSeek sparse attention, let each token decide how many tokens to read
 
+## Abstract
+
+**In DeepSeek sparse attention, every token reads the same 2,048 earlier tokens. Let each token decide how many it reads instead.** A token continuing a common phrase needs only a few. A token answering a question about something far back needs many.
+
+**Each token then reads about half as many tokens, for the same quality.** This was measured in a small model, with texts of 128 tokens.
+
+**In DeepSeek-V3.2, that would save 10–40% of the attention compute.** This is calculated, not measured. The saving is largest for texts of a few thousand tokens. At 128K tokens it is smallest, because there most of the cost is scoring every earlier token, which this change does not reduce.
+
+**When tokens are read in whole GPU blocks, letting each token choose matters most.** With blocks, the same amount for every token loses a lot of quality, and choosing wins most of it back.
+
+**Each token must read a minimum number of tokens, or the model breaks.** The best minimum grows with the text length, at about 1/24 of it.
+
+**Train the scoring network by copying where attention looks.** Training it on the model's own loss pushes all its scores to 0.
+
+---
+
 ## Long texts are expensive because every token reads every earlier token
 
 When a language model writes the next token, it looks back at the earlier tokens of the text to decide what comes next. This is **attention**. The token doing the looking is called the **query**.
