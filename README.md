@@ -5,7 +5,7 @@
 
 It fits how GPUs work. A GPU loads earlier tokens in **blocks** of neighbouring tokens, 64 or 128 at a time. So each token picks **whole blocks**, and the number it reads is always a whole number of blocks: for example 1,024, 1,536 or 2,048 tokens with blocks of 128.
 
-![A chosen number of blocks reads about half as many tokens as a fixed number for the same loss](blocks_long.png)
+![Letting each token choose how much to read cuts the reading in half, with the same loss](blocks_long.png)
 
 ---
 
@@ -87,7 +87,7 @@ Texts of 64 tokens:
 
 The sizes **do not need to be powers of 2** (4, 8, 16, 32 and so on). Any whole number of blocks works about as well.
 
-### The exact rule for choosing does not matter
+### How each token decides its amount does not matter, only that it decides
 
 I tried three ways to choose:
 
@@ -105,7 +105,7 @@ I tried three ways to choose:
 
 When a token reads single tokens instead of blocks, choosing helps only **under about 10 of 64 tokens**. Above that, the same number for every token does just as well.
 
-### Neighbouring tokens cannot share one choice unless reading is in blocks
+### Making 4 neighbouring tokens read the same tokens breaks the model, unless reading is in blocks
 
 GPUs also like to process 4 neighbouring tokens together, so I let **4 neighbours share one choice** of what to read.
 
