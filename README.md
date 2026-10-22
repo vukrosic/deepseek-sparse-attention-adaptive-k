@@ -6,7 +6,7 @@
 
 ![A chosen number of blocks reads about half as many tokens as a fixed number for the same loss](blocks_long.png)
 
-## The core idea
+## DeepSeek sparse attention reads the same number of tokens for every token
 
 When a token looks back at earlier tokens, attention reads every one of them. The token doing the looking is called the **query**. For long texts this is the slowest part of a language model.
 
@@ -16,7 +16,7 @@ But queries need different amounts. Continuing a common phrase needs the last wo
 
 My question: if each query decides how many tokens to read, does the model do better for the same amount of reading?
 
-## What I changed
+## The change: each token chooses how many blocks of tokens to read
 
 The picker learns by copying where the real attention looks. So its scores show, for each token, whether its attention points at one place or is spread over many.
 
@@ -28,7 +28,7 @@ In this small model a block is 4 tokens. It stands in for the 64- or 128-token b
 
 **Loss** measures how wrong the model's guesses of the next token are. Lower is better. Normal attention, which reads every earlier token, scores 1.418 in this test.
 
-### Half the reading for the same quality
+### Choosing reads half as many tokens as a fixed number, with the same quality
 
 I compared two versions of DeepSeek sparse attention on texts of 128 tokens, cut into 32 blocks of 4 tokens.
 
@@ -38,7 +38,7 @@ In the second, each token chooses how many blocks to read. On average a token re
 
 So the second reads less than half as many tokens, and its loss is only 0.009 higher. That gap is smaller than the difference between two runs of the same setting.
 
-### Reading in blocks is where the choice helps most
+### Reading in blocks hurts a fixed number, and choosing fixes it
 
 Reading whole blocks is fast on a GPU, but it wastes reading: if a token needs one word, it must also read the 3 words next to it.
 
@@ -46,21 +46,27 @@ With the same number for every token, this costs a lot. On 64-token texts, readi
 
 When each token chooses its number of blocks, the loss comes back down to 1.371, while reading about the same amount (7.6 tokens).
 
-### Every token must read at least a few tokens
+### Each token must read at least 4 tokens, or the model breaks
 
 If a token may read only 1 or 2 tokens, the model breaks (loss 1.566). The picker is sometimes sure about the wrong token, and then the token reads nothing useful. A minimum of 4 tokens fixes this.
 
 The sizes do not need to be powers of 2 (4, 8, 16, 32 and so on). Any whole number of blocks works about as well.
 
-### How a token chooses barely matters
+### The exact rule for choosing does not matter
 
 I tried three ways to choose: keep the top blocks until they hold a share of the picker's score, keep every block that scores close to the best one, or count how spread out the scores are. All three gave about the same results.
 
 ## Where it stops working
 
+### Without blocks, choosing helps only when tokens read very little
+
 When a token reads single tokens instead of blocks, choosing helps only when tokens read very little (under about 10 of 64 tokens). Above that, the same number for every token does just as well.
 
+### Neighbouring tokens cannot share one choice unless reading is in blocks
+
 GPUs also like to process 4 neighbouring tokens together, so I let 4 neighbours share one choice of what to read. Without blocks this breaks the model (loss 1.713): one token needs a word far back, its 3 neighbours want other words, and the shared choice serves none of them well. With blocks, sharing costs almost nothing.
+
+### Tested only on a tiny model
 
 This is a tiny model with texts of 64 and 128 tokens and blocks of 4 tokens. Each setting ran 3 times, and runs of one setting differ by up to 0.1. I measured quality, not speed. Whether this holds in large models with blocks of 64 or 128 tokens is a guess.
 
