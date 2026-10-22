@@ -1,0 +1,148 @@
+# Results
+
+**Model:** 2-layer transformer, width 64, 2 attention heads, pre-norm RMSNorm, RoPE, QK-norm, gated attention, SwiGLU experts, a value embedding, an 8-expert mixture of experts (2 active), short convolution on the keys. Muon on all matrices, AdamW on embeddings and norms. Sequences of 64 tokens, batch 32, 260 steps, lr 0.028. About 18 s per run on a MacBook CPU.
+
+**Tasks** (one per sequence, mixed like a language model's data): next word in text from a fixed random chain, copy a piece, common fact, rare fact, repeat the token 2 back, find a word's partner among 30 pairs, sort, count zeros.
+
+**Loss:** test loss weighted by how often each task appears in training (lower is better). Two runs that differ only in seed differ by about 0.02–0.04.
+
+**Normal attention:** 1.221, 1.267, 1.284 on seeds 0–2 (mean 1.257); over 9 seeds the mean is 1.268.
+
+**Tokens read per word:** at test time, the average number of tokens each query attends to, over both layers. Each task is weighted by its share of scored positions (text and repeat-2-back score 62–63 positions per sequence, copy 16.5, sort 6, the others 1). Fact questions are 3 tokens long, so they can read at most 3.
+
+## DeepSeek sparse attention as built here
+
+- **Picker** (DeepSeek calls it the lightning indexer): 4 heads of size 16 with RoPE. Score of earlier token s for query t: I(t, s) = Σ_heads w · ReLU(q · k). Its inputs are detached, so it never changes the rest of the model.
+- **Selection:** each query keeps its top-k earlier tokens by I and attends only to them, in both layers.
+- **Training the picker:** KL(main attention summed over heads ‖ softmax(I)) over the kept tokens. The first 60 steps use dense attention while the picker learns. The picker's matrices are trained with Muon.
+- **Chosen budget:** take softmax(I) per query, then pick a size with one of the rules below, and round it up to the next allowed size (default 4, 8, 16, 32, 64).
+
+## Knobs
+
+All in `toy/suite.py`. `toy/run.sh` sets the model above, sequences of 64 and DeepSeek sparse attention with a 60-step warm-up and a Muon-trained picker.
+
+| knob | meaning |
+|---|---|
+| `DSA_K=8` | fixed top-k: 8 tokens per query, used when `DSA_P` is unset (`run.sh` defaults to 64) |
+| `DSA_P=0.5` | chosen budget: the rule's parameter (p, r or c) |
+| `DSA_RULE=p` | `p`: smallest count whose top tokens hold p of softmax(I). `ratio`: tokens with softmax(I) ≥ r × the best. `ent`: c × exp(entropy of softmax(I)) |
+| `DSA_BUCKETS=4,8,16,32,64` | allowed sizes; the count is rounded up to the next one. A single value (e.g. `8`) is a fixed size through the same code |
+| `DSA_BLK=4` | the picker scores blocks of 4 neighbouring tokens (softmax(I) summed inside the block) and keeps whole blocks |
+| `DSA_QT=4` | 4 neighbouring queries share one choice and one size (their softmax(I) averaged) |
+| `DSA_WIN=4` | the last 4 tokens are always kept as well |
+| `DSA_TRAIN=copy` | how the picker learns: `copy`, `copyall`, `sum`, `alt`, `anneal`, `switch`, `task` (see Step 2) |
+
+Command for every run: `cd toy && env [knobs] ./run.sh SEED`. Then `python3 summ.py` prints mean loss and tokens read per setting.
+
+## Step 1: fixed top-k
+
+`env DSA_K=k ./run.sh SEED` (with `DSA_P` unset, `DSA_K` is the fixed count)
+
+| k | s0 | s1 | s2 | mean | tokens read |
+|---|---|---|---|---|---|
+| 4 | 1.478 | 1.452 | 1.514 | 1.481 | 4.0 |
+| 8 | 1.331 | 1.292 | 1.318 | 1.314 | 7.7 |
+| 16 | 1.278 | 1.263 | 1.288 | 1.276 | 14.3 |
+| 32 | 1.265 | 1.253 | 1.278 | 1.265 | 24.7 |
+
+## Step 2: how the picker is trained (fixed top-8)
+
+`env DSA_K=8 DSA_TRAIN=mode ./run.sh SEED`
+
+| mode | what it does | s0 | s1 | s2 | mean |
+|---|---|---|---|---|---|
+| `copy` | KL to the main attention over kept tokens (DeepSeek) | 1.331 | 1.292 | 1.318 | 1.314 |
+| `copyall` | KL over all earlier tokens | 1.302 | 1.283 | 1.318 | 1.301 |
+| `sum` | copy, plus log softmax(I) added to the attention scores so the task loss also trains it | 1.365 | 1.398 | 1.420 | 1.394 |
+| `alt` | task loss always, copy on every other step | 1.348 | 1.485 | 1.460 | 1.431 |
+| `anneal` | task loss always, copy weight falls from 1 to 0 | 1.451 | 1.463 | 1.473 | 1.462 |
+| `switch` | copy during warm-up, then task loss only | 2.088 | 2.380 | 2.407 | 2.292 |
+| `task` | task loss only | 2.525 | 2.513 | 2.558 | 2.532 |
+
+With `task`, every picker score in layer 1 ends at 0 (the ReLU outputs are all zero), so top-k picks arbitrary tokens.
+
+## Step 3: chosen budget, top-p rounded up to 4/8/16/32/64
+
+`env DSA_P=p ./run.sh SEED`
+
+| p | s0 | s1 | s2 | mean | tokens read |
+|---|---|---|---|---|---|
+| 0.5 | 1.331 | 1.317 | 1.368 | 1.339 | 5.8 |
+| 0.7 | 1.286 | 1.312 | 1.331 | 1.310 | 9.8 |
+| 0.8 | 1.262 | 1.255 | 1.307 | 1.275 | 14.0 |
+| 0.9 | 1.257 | 1.267 | 1.289 | 1.271 | 18.5 |
+
+Tokens read per task at p=0.5 (mean of 3 seeds): common fact 3.0, rare fact 3.0, sort 4.2, text 4.9, copy 6.2, count 8.7, repeat 2 back 9.2, find a partner 17.3.
+
+## Step 4: which sizes are allowed (p=0.5)
+
+`env DSA_P=0.5 DSA_BUCKETS=list ./run.sh SEED`
+
+| allowed sizes | s0 | s1 | s2 | mean | tokens read |
+|---|---|---|---|---|---|
+| 4, 8, 16, 32, 64 | 1.331 | 1.317 | 1.368 | 1.339 | 5.8 |
+| any count from 4 (4, 5, …, 64) | 1.355 | 1.336 | 1.379 | 1.357 | 5.3 |
+| 4, 16, 64 | 1.300 | 1.326 | 1.344 | 1.324 | 7.0 |
+| 8, 16, 32, 64 | 1.282 | 1.274 | 1.301 | 1.286 | 9.5 |
+| 1, 2, 4, 8, 16, 32, 64 | 1.543 | 1.588 | 1.568 | 1.566 | 3.5 |
+| any count from 1 (1, 2, …, 64) | 1.527 | 1.585 | 1.638 | 1.583 | 3.0 |
+
+Any count from 1 at p=0.7: 1.385, 1.400, 1.403 (mean 1.396, 5.1 tokens).
+
+## Step 5: how each query's size is chosen (sizes 4..64)
+
+`env DSA_RULE=rule DSA_P=value ./run.sh SEED`
+
+| rule | value | s0 | s1 | s2 | mean | tokens read |
+|---|---|---|---|---|---|---|
+| ratio | 0.3 | 1.322 | 1.288 | 1.365 | 1.325 | 6.4 |
+| ratio | 0.2 | 1.285 | 1.284 | 1.335 | 1.301 | 7.1 |
+| ratio | 0.1 | 1.281 | 1.257 | 1.300 | 1.279 | 8.5 |
+| entropy | 0.25 | 1.344 | 1.357 | 1.368 | 1.356 | 5.2 |
+| entropy | 0.5 | 1.288 | 1.286 | 1.328 | 1.301 | 7.6 |
+| entropy | 1 | 1.255 | 1.253 | 1.296 | 1.268 | 13.9 |
+| entropy | 2 | 1.252 | 1.252 | 1.299 | 1.268 | 19.4 |
+
+Top-p is in Step 3. Below 8 tokens read, every rule beats the fixed top-k line. From 10 tokens on, all rules and fixed top-k agree within noise.
+
+## Step 6: GPU-friendly picking (top-p, p=0.5)
+
+`env DSA_P=0.5 DSA_BLK=b DSA_QT=q DSA_WIN=w [DSA_BUCKETS=8 or 16 for a fixed size] ./run.sh SEED`
+
+| picking | size | s0 | s1 | s2 | mean | tokens read |
+|---|---|---|---|---|---|---|
+| single tokens | chosen | 1.331 | 1.317 | 1.368 | 1.339 | 5.8 |
+| single tokens | fixed 8 | 1.331 | 1.292 | 1.318 | 1.314 | 7.7 |
+| blocks of 4 | chosen | 1.381 | 1.344 | 1.390 | 1.371 | 7.6 |
+| blocks of 4 | fixed 8 | 1.471 | 1.510 | 1.545 | 1.509 | 7.7 |
+| blocks of 4 | fixed 16 | 1.344 | 1.313 | 1.398 | 1.352 | 14.3 |
+| blocks of 4 + tiles of 4 | chosen | 1.349 | 1.392 | 1.394 | 1.378 | 9.1 |
+| blocks of 4 + tiles of 4 | fixed 8 | 1.578 | 1.544 | 1.586 | 1.569 | 7.7 |
+| blocks of 4 + tiles of 4 | fixed 16 | 1.301 | 1.321 | 1.352 | 1.325 | 14.3 |
+| tiles of 4, single tokens | chosen | 1.696 | 1.687 | 1.754 | 1.713 | 8.4 |
+| tiles of 4 + window 4 | chosen | 1.596 | 1.546 | 1.540 | 1.561 | 12.0 |
+| single tokens + window 4 | chosen | 1.321 | 1.301 | 1.323 | 1.315 | 10.0 |
+| blocks of 4 + window 4 | chosen | 1.374 | 1.370 | 1.416 | 1.387 | 12.1 |
+
+Per-task loss, mean of 3 seeds (chosen size):
+
+| picking | text | copy | common fact | repeat 2 back | find a partner | sort | rare fact | count |
+|---|---|---|---|---|---|---|---|---|
+| single tokens | 1.98 | 0.60 | 0.26 | 0.26 | 0.77 | 3.87 | 0.64 | 2.51 |
+| blocks of 4 | 1.98 | 0.75 | 0.20 | 0.27 | 0.92 | 3.89 | 0.60 | 2.51 |
+| tiles of 4 | 1.98 | 1.54 | 0.30 | 0.73 | 2.43 | 4.14 | 0.85 | 2.61 |
+| blocks of 4 + tiles of 4 | 1.98 | 0.93 | 0.19 | 0.28 | 0.55 | 3.92 | 0.64 | 2.55 |
+| tiles of 4 + window 4 | 1.98 | 1.33 | 0.23 | 0.37 | 1.60 | 4.10 | 0.78 | 2.51 |
+
+Tiles without blocks break copying and partner lookup. Why blocks repair this is not tested.
+
+## Literature
+
+- DeepSeek-V3.2 ([arXiv 2512.02556](https://arxiv.org/abs/2512.02556)): DeepSeek sparse attention. A lightning indexer (ReLU, trained by KL to the dense attention, dense warm-up first) picks a fixed top-k of single tokens per query (2,048 in the released model).
+- NSA ([arXiv 2502.11089](https://arxiv.org/abs/2502.11089)): picks blocks of tokens with a fixed count, plus a compressed branch and a sliding-window branch, with a hardware-aligned kernel.
+- FSA ([arXiv 2508.18224](https://arxiv.org/abs/2508.18224)): an NSA kernel that loops over key blocks outside and query tokens inside.
+- MiniMax Sparse Attention ([arXiv 2606.13392](https://arxiv.org/abs/2606.13392)): an index branch scores key-value blocks and keeps a fixed top-k per GQA group, trained with a KL loss, with a forced local block.
+- Twilight ([arXiv 2502.02770](https://arxiv.org/abs/2502.02770), NeurIPS 2025): training-free top-p pruning on top of an existing sparse method, so the budget varies per query.
+- Full Attention Strikes Back / RTPurbo ([arXiv 2605.16928](https://arxiv.org/abs/2605.16928)): converts a dense model in a few hundred steps; a 16-dimensional indexer trained by KL, top-p per head and query (p = 0.9), a block mask of 64 in the kernel. It reports budgets varying about 5× across queries. No minimum size or rounding is described.
+- AB-Sparse ([arXiv 2605.12110](https://arxiv.org/abs/2605.12110)): a different block size per head under a fixed token budget.
+- The Sparse Frontier ([arXiv 2504.17768](https://arxiv.org/abs/2504.17768)): compares fixed-budget and coverage-threshold sparse attention.

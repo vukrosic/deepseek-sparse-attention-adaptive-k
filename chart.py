@@ -1,0 +1,120 @@
+"""Draws every chart in this repo from the numbers in RESULTS.md (3-seed means). usage: python3 chart.py"""
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+BLUE, ORANGE, GREEN, PURPLE, GRAY, INK, INK2, GRID = "#2a78d6", "#eb6834", "#3a9a5b", "#8a5cc2", "#9a9890", "#0b0b0b", "#52514e", "#e1e0d9"
+plt.rcParams.update({"font.family": "sans-serif", "font.sans-serif": ["Helvetica", "Arial"], "font.size": 11,
+                     "axes.edgecolor": "#c3c2b7", "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
+                     "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "grid.color": GRID,
+                     "axes.axisbelow": True, "legend.frameon": False})
+FULL = 1.257   # normal attention, same 3 seeds
+
+# (tokens kept per word on average, loss)
+FIXED = [(4.0, 1.481), (7.7, 1.314), (14.3, 1.277), (24.7, 1.265)]          # top-4, 8, 16, 32
+TOP_P = [(5.8, 1.339), (9.8, 1.310), (14.0, 1.275), (18.5, 1.271)]          # p = 0.5, 0.7, 0.8, 0.9
+RATIO = [(6.4, 1.325), (7.1, 1.301), (8.5, 1.279)]                         # r = 0.3, 0.2, 0.1
+ENT = [(5.2, 1.356), (7.6, 1.301), (13.9, 1.268), (19.4, 1.268)]            # c = 0.25, 0.5, 1, 2
+BLK_FIXED, BLK_CHOSEN = [(7.7, 1.509), (14.3, 1.352)], (7.6, 1.371)         # blocks of 4 tokens
+BT_FIXED, BT_CHOSEN = [(7.7, 1.569), (14.3, 1.325)], (9.1, 1.378)           # blocks of 4 + tiles of 4 words
+
+
+def frame(fig, title, sub, note):
+    fig.suptitle(title, fontsize=16, fontweight="bold", color=INK, x=0.07, ha="left")
+    fig.text(0.07, 0.885, sub, fontsize=11, color=INK2)
+    fig.text(0.07, 0.03, note, fontsize=10, color=INK2, ha="left", va="bottom", linespacing=1.5)
+
+
+def full_line(ax, x):
+    ax.axhline(FULL, color=GRAY, lw=1.5, ls="--")
+    ax.text(x, FULL - 0.008, f"normal attention {FULL}", ha="right", va="top", fontsize=10, color=INK2)
+
+
+# 1. main result: fixed vs chosen size, for single tokens, blocks, blocks + query tiles
+fig, ax = plt.subplots(figsize=(11.5, 6.6))
+fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.22)
+frame(fig, "A chosen number of tokens per word helps most when tokens are read in blocks",
+      "DeepSeek sparse attention, sequences of 64 tokens. Dashed = same number for every word, star = each word chooses. Mean of 3 runs.",
+      "Each word keeps the top tokens that hold half of its picker's attention, rounded up to 4, 8, 16, 32 or 64 tokens.\n"
+      "Blocks: the picker keeps whole blocks of 4 neighbouring tokens. Tiles: 4 neighbouring words share one choice. Both match how GPU kernels load data.")
+for fixed, chosen, c, name in ((FIXED, TOP_P[0], BLUE, "single tokens"), (BLK_FIXED, BLK_CHOSEN, ORANGE, "blocks of 4 tokens"),
+                               (BT_FIXED, BT_CHOSEN, GREEN, "blocks of 4 tokens + tiles of 4 words")):
+    ax.plot([a for a, _ in fixed], [b for _, b in fixed], color=c, ls="--", marker="o", ms=6, lw=1.8, label=f"{name}: same number")
+    ax.plot(*chosen, color=c, marker="*", ms=19, ls="none", markeredgecolor="white", markeredgewidth=1, label=f"{name}: each word chooses")
+    ax.annotate(f"{chosen[1]:.3f}", chosen, textcoords="offset points", xytext=(10, -4), fontsize=10, color=c, fontweight="bold")
+for (a, b), lab in zip(BLK_FIXED, ("8", "16")):
+    ax.annotate(f"fixed {lab}: {b:.3f}", (a, b), textcoords="offset points", xytext=(-92, -4) if lab == "8" else (8, 4), fontsize=9.5, color=ORANGE)
+for (a, b), lab in zip(BT_FIXED, ("8", "16")):
+    ax.annotate(f"fixed {lab}: {b:.3f}", (a, b), textcoords="offset points", xytext=(8, -14 if lab == "16" else 4), fontsize=9.5, color=GREEN)
+full_line(ax, 26)
+ax.set_xlim(0, 26.5); ax.set_ylim(1.22, 1.6)
+ax.set_xlabel("tokens read per word, on average (of up to 64)"); ax.set_ylabel("loss (lower is better)")
+ax.legend(loc="upper right", fontsize=9.5, ncol=1)
+fig.savefig("main_result.png", dpi=170); plt.close(fig)
+
+# 2. how a word's size is chosen: three rules vs a fixed number
+fig, ax = plt.subplots(figsize=(11.5, 6.4))
+fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.22)
+frame(fig, "Three ways to choose each word's number of tokens give about the same result",
+      "Single tokens, sizes rounded up to 4, 8, 16, 32 or 64. Mean of 3 runs; two runs differ by about 0.02–0.04.",
+      "top-p: the top tokens that hold a share p of the picker's attention.   ratio: every token scoring at least r times the best token.\n"
+      "entropy: c times the picker's effective number of tokens. Below 8 tokens all three beat a fixed number; from 10 tokens on they match it.")
+for pts, c, name, labs in ((FIXED, BLUE, "same number for every word (top-k)", ("k=4", "k=8", "k=16", "k=32")),
+                           (TOP_P, ORANGE, "top-p", ("p=0.5", "p=0.7", "p=0.8", "p=0.9")),
+                           (RATIO, GREEN, "ratio", ("r=0.3", "r=0.2", "r=0.1")),
+                           (ENT, PURPLE, "entropy", ("c=0.25", "c=0.5", "c=1", "c=2"))):
+    ax.plot([a for a, _ in pts], [b for _, b in pts], color=c, marker="o", ms=6, lw=2, label=name)
+    for (a, b), lab in zip(pts, labs):
+        off = {"p=0.8": (-40, -4), "c=1": (-6, -15), "k=16": (6, 6), "c=0.5": (6, -12), "k=8": (6, 6)}.get(lab, (-4, -15) if c == GREEN else (5, 5))
+        ax.annotate(lab, (a, b), textcoords="offset points", xytext=off, fontsize=8.5, color=c)
+full_line(ax, 26)
+ax.set_xlim(0, 26.5); ax.set_ylim(1.22, 1.52)
+ax.set_xlabel("tokens read per word, on average (of up to 64)"); ax.set_ylabel("loss (lower is better)")
+ax.legend(loc="upper right", fontsize=10)
+fig.savefig("rules.png", dpi=170); plt.close(fig)
+
+# 3. which sizes are allowed, and how many tokens each task chooses
+SIZES = [("4, 8, 16,\n32, 64", 1.339, 5.8, ORANGE), ("any number\nfrom 4", 1.357, 5.3, ORANGE), ("4, 16, 64", 1.324, 7.0, ORANGE),
+         ("8, 16,\n32, 64", 1.286, 9.5, ORANGE), ("1, 2, 4, 8,\n16, 32, 64", 1.566, 3.5, GRAY), ("any number\nfrom 1", 1.583, 3.0, GRAY)]
+NAME = {"factc": "fact,\ncommon", "factr": "fact,\nrare", "sort": "sort", "chain": "next word\nin text", "copy": "copy a\npiece",
+        "count": "count\nzeros", "back2": "repeat\n2 back", "recall": "find a\npartner"}
+KEPT = {"factc": 3.0, "factr": 3.0, "sort": 4.2, "chain": 4.9, "copy": 6.2, "count": 8.7, "back2": 9.2, "recall": 17.3}
+fig, (ax, bx) = plt.subplots(1, 2, figsize=(13, 6.2), gridspec_kw={"width_ratios": [1.1, 1]})
+fig.subplots_adjust(left=0.07, right=0.98, top=0.82, bottom=0.24, wspace=0.22)
+frame(fig, "The smallest allowed size matters; rounding to fixed sizes costs nothing",
+      "top-p with p=0.5, mean of 3 runs. Left: loss for each set of allowed sizes. Right: tokens each task reads with sizes 4 to 64.",
+      "Letting a word read only 1 or 2 tokens breaks it (gray). Rounding up to 4, 8, 16, 32 or 64 scores the same as allowing any number from 4.\n"
+      "Fact questions are only 3 tokens long, so they read all 3. Finding a word's partner among 30 pairs needs the most tokens.")
+ax.bar(range(len(SIZES)), [l for _, l, _, _ in SIZES], color=[c for *_, c in SIZES], width=0.62)
+for i, (_, l, k, _) in enumerate(SIZES): ax.text(i, l + 0.006, f"{l:.3f}\n{k} tokens", ha="center", fontsize=9.5, color=INK)
+ax.axhline(FULL, color=GRAY, lw=1.5, ls="--")
+ax.set_xticks(range(len(SIZES))); ax.set_xticklabels([n for n, *_ in SIZES], fontsize=9.5)
+ax.set_ylim(1.2, 1.65); ax.set_ylabel("loss (lower is better)")
+ax.set_title(f"Allowed sizes (dashed: normal attention {FULL})", loc="left", fontsize=13, fontweight="bold", color=INK, pad=10)
+order = list(KEPT)
+bx.bar(range(len(order)), [KEPT[s] for s in order], color=ORANGE, width=0.6)
+for i, s in enumerate(order): bx.text(i, KEPT[s] + 0.3, f"{KEPT[s]:.1f}", ha="center", fontsize=10, color=INK)
+bx.axhline(8, color=BLUE, lw=1.5, ls=":"); bx.text(-0.3, 8.4, "top-8 reads 8 for every word", ha="left", fontsize=9.5, color=BLUE)
+bx.set_xticks(range(len(order))); bx.set_xticklabels([NAME[s] for s in order], fontsize=9.5)
+bx.set_ylim(0, 20); bx.set_ylabel("tokens read per word")
+bx.set_title("Tokens each task chooses", loc="left", fontsize=13, fontweight="bold", color=INK, pad=10)
+fig.savefig("sizes.png", dpi=170); plt.close(fig)
+
+# 4. how the picker is trained (fixed top-8)
+MODES = [("copy\n(DeepSeek)", 1.314, BLUE), ("copy, over\nall tokens", 1.301, BLUE), ("copy + task\nevery step", 1.394, ORANGE),
+         ("copy every\nother step,\ntask always", 1.431, ORANGE), ("copy fades\nout, task\nstays", 1.462, ORANGE),
+         ("copy in\nwarm-up,\nthen task", 2.292, ORANGE), ("task only", 2.532, ORANGE)]
+fig, ax = plt.subplots(figsize=(11.5, 6.2))
+fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.28)
+frame(fig, "Training the picker to copy the attention beats training it on the task",
+      "DeepSeek sparse attention keeping 8 of 64 tokens. Mean of 3 runs.",
+      "Copy = the picker learns to match where the main attention looks (KL loss), as in DeepSeek V3.2. Task = the picker's scores are added\n"
+      "to the attention scores, so the model's own loss trains it. The more task training, the worse. With task only, every picker score in\n"
+      "layer 1 ends at 0 (its ReLU dies), so it keeps random tokens. The picker is trained with Muon in every run.")
+ax.bar(range(len(MODES)), [l for _, l, _ in MODES], color=[c for *_, c in MODES], width=0.6, alpha=0.9)
+for i, (_, l, _) in enumerate(MODES): ax.text(i, l + 0.03, f"{l:.3f}", ha="center", fontsize=10.5, color=INK)
+ax.axhline(FULL, color=GRAY, lw=1.5, ls="--"); ax.text(6.45, FULL - 0.04, f"normal attention {FULL}", ha="right", va="top", fontsize=10, color=INK2)
+ax.set_xticks(range(len(MODES))); ax.set_xticklabels([n for n, *_ in MODES], fontsize=10)
+ax.set_ylim(1.0, 2.75); ax.set_ylabel("loss (lower is better)")
+fig.savefig("picker_training.png", dpi=170); plt.close(fig)
+print("wrote main_result.png rules.png sizes.png picker_training.png")
