@@ -149,18 +149,13 @@ fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.2)
 frame(fig, "The best minimum grows with the context length, at about 1/24 of it",
       "Each token chooses how much to read, but never less than the minimum. Single tokens, 2 runs (512 tokens: 1 run for the fixed amounts).",
       "Best = the minimum whose loss is furthest below DeepSeek's fixed amount reading as many tokens. Minimums tried: 1, 2, 4, 8 (and 16, 32, 64\n"
-      "at the longest lengths), so each best value is known only to within a factor of 2. Dashed: the straight line continued, a guess.")
-xs = [2 ** i for i in range(5, 12)]
-fit = [x / 24 for x in xs]
-ax.plot(xs[:5], fit[:5], color=GRAY, lw=1.5, label="minimum = context / 24")
-ax.plot(xs[4:], fit[4:], color=GRAY, lw=1.5, ls="--")
-ax.plot([a for a, _ in BEST_MIN], [b for _, b in BEST_MIN], color=ORANGE, marker="o", ms=9, lw=0, label="best minimum measured")
-for a, b in BEST_MIN: ax.annotate(f"{b} tokens", (a, b), textcoords="offset points", xytext=(0, 11), ha="center", fontsize=10, color=INK)
-for a in xs[5:]: ax.annotate(f"~{a / 24:.0f}?", (a, a / 24), textcoords="offset points", xytext=(0, 11), ha="center", fontsize=10, color=INK2)
+      "at the longest lengths), so each best value is known only to within a factor of 2.")
+xs = [a for a, _ in BEST_MIN]
+ax.plot(xs, [b for _, b in BEST_MIN], color=ORANGE, marker="o", ms=9, lw=2.5)
+for a, b in BEST_MIN: ax.annotate(f"{b} tokens", (a, b), textcoords="offset points", xytext=(0, 12), ha="center", fontsize=10.5, color=INK)
 ax.set_xscale("log", base=2); ax.set_yscale("log", base=2)
-ax.set_xticks(xs); ax.set_xticklabels([str(x) for x in xs]); ax.set_yticks([1, 2, 4, 8, 16, 32, 64, 128]); ax.set_yticklabels(["1", "2", "4", "8", "16", "32", "64", "128"])
-ax.set_ylim(1, 160); ax.set_xlabel("context length (tokens)"); ax.set_ylabel("best minimum tokens read")
-ax.legend(loc="upper left", fontsize=10)
+ax.set_xticks(xs); ax.set_xticklabels([str(x) for x in xs]); ax.set_yticks([1, 2, 4, 8, 16, 32, 64]); ax.set_yticklabels(["1", "2", "4", "8", "16", "32", "64"])
+ax.set_ylim(1, 64); ax.set_xlabel("context length (tokens)"); ax.set_ylabel("best minimum tokens read")
 fig.savefig("minimum_scaling.png", dpi=170); plt.close(fig)
 # 7. gain over DeepSeek's fixed amount for each minimum, one line per context length (RESULTS.md step 8)
 GAIN = {32: [(1, -0.269), (2, 0.029), (4, 0.028), (8, 0.006)],
