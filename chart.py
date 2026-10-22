@@ -117,4 +117,28 @@ ax.axhline(FULL, color=GRAY, lw=1.5, ls="--"); ax.text(6.45, FULL - 0.04, f"norm
 ax.set_xticks(range(len(MODES))); ax.set_xticklabels([n for n, *_ in MODES], fontsize=10)
 ax.set_ylim(1.0, 2.75); ax.set_ylabel("loss (lower is better)")
 fig.savefig("picker_training.png", dpi=170); plt.close(fig)
-print("wrote main_result.png rules.png sizes.png picker_training.png")
+
+# 5. longer sequences (128 tokens, 32 blocks of 4): a chosen number of blocks vs a fixed number
+LONG_FULL = 1.418
+LONG_FIXED = [(15.1, 1.643), (28.4, 1.535), (48.8, 1.449)]       # fixed 16, 32, 64 tokens in blocks of 4
+LONG_CHOSEN = [(13.6, 1.573), (24.2, 1.458), (32.1, 1.443)]      # p = 0.5, 0.7, 0.85; any whole number of blocks
+fig, ax = plt.subplots(figsize=(11.5, 6.4))
+fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.2)
+frame(fig, "Reading whole blocks, a chosen number reads about half as many tokens for the same loss",
+      "DeepSeek sparse attention, sequences of 128 tokens = 32 blocks of 4. Mean of 3 runs; runs of one setting differ by up to about 0.1.",
+      "Same number: every token reads 4, 8 or 16 blocks. Each token chooses: it keeps the top blocks that hold a share p of its picker's attention,\n"
+      "any whole number of blocks. Real GPU kernels read blocks of 64 or 128 tokens; blocks of 4 stand in for them in this small model.")
+ax.plot([a for a, _ in LONG_FIXED], [b for _, b in LONG_FIXED], color=BLUE, marker="o", ms=7, lw=2, label="same number of blocks for every token")
+ax.plot([a for a, _ in LONG_CHOSEN], [b for _, b in LONG_CHOSEN], color=ORANGE, marker="o", ms=7, lw=2, label="each token chooses its number of blocks")
+for (a, b), lab in zip(LONG_FIXED, ("16 tokens", "32 tokens", "64 tokens")):
+    ax.annotate(f"{lab}: {b:.3f}", (a, b), textcoords="offset points", xytext=(8, 6), fontsize=9.5, color=BLUE)
+for (a, b), lab in zip(LONG_CHOSEN, ("p=0.5", "p=0.7", "p=0.85")):
+    ax.annotate(f"{lab}: {b:.3f}", (a, b), textcoords="offset points", xytext=(-10, -4) if lab == "p=0.5" else (-6, -17), fontsize=9.5, color=ORANGE,
+                ha="right" if lab == "p=0.5" else "center")
+ax.axhline(LONG_FULL, color=GRAY, lw=1.5, ls="--")
+ax.text(64, LONG_FULL - 0.006, f"normal attention {LONG_FULL}", ha="right", va="top", fontsize=10, color=INK2)
+ax.set_xlim(0, 66); ax.set_ylim(1.38, 1.68)
+ax.set_xlabel("tokens read per token, on average (of up to 128)"); ax.set_ylabel("loss (lower is better)")
+ax.legend(loc="upper right", fontsize=10)
+fig.savefig("blocks_long.png", dpi=170); plt.close(fig)
+print("wrote main_result.png rules.png sizes.png picker_training.png blocks_long.png")

@@ -1,8 +1,10 @@
 # DeepSeek sparse attention where each token decides how many tokens to read
 
-**DeepSeek sparse attention lets each token read only a fixed number of earlier tokens, chosen by a small learned picker. I let each token choose its own number instead, rounded up to 4, 8, 16, 32 or 64 so GPU kernels still see fixed sizes. When tokens are read in GPU-friendly blocks, this works much better than one fixed number: reading 7.6 tokens on average, it gets close to the loss of a fixed 16.**
+**When each token decides how many earlier tokens to read, DeepSeek sparse attention reads about half as many tokens for almost the same quality.**
 
-![Fixed vs chosen number of tokens, for single tokens, blocks and blocks + query tiles](main_result.png)
+**It fits how GPUs work. A GPU loads earlier tokens in blocks of neighbouring tokens, 64 or 128 at a time. So each token picks whole blocks, and the number it reads is always a whole number of blocks, for example 1,024, 1,536 or 2,048 tokens with blocks of 128.**
+
+![A chosen number of blocks reads about half as many tokens as a fixed number for the same loss](blocks_long.png)
 
 ## The core idea
 
@@ -18,25 +20,25 @@ My question: if each query decides how many tokens to read, does the model do be
 
 The picker is trained to copy where the real attention looks. So its scores also show how spread out each query's attention is.
 
-Each query keeps its top-scored tokens until they hold half of the picker's probability (**top-p**). The count is rounded up to 4, 8, 16, 32 or 64, because GPU kernels need a few fixed sizes.
+Each query keeps its top-scored blocks until they hold a share p of the picker's probability (**top-p**). A query whose attention sits in one place reads few blocks; a query whose attention is spread out reads many. In this small model a block is 4 tokens, standing in for the 64- or 128-token blocks of real GPU kernels.
 
 ## Results
 
-- **At small budgets it beats a fixed number.** Reading 5.8 tokens on average, it scores 1.339. Fixed 4 tokens score 1.481 and fixed 8 score 1.314.
-- **The gain is biggest when tokens are read in blocks**, as GPU kernels do. A fixed 8 tokens in blocks of 4 scores 1.509. A chosen number of blocks scores 1.371 reading 7.6 tokens, close to a fixed 16 (1.352).
-- **A minimum of 4 matters; rounding is free.** Allowing 1 or 2 tokens breaks the model (1.566).
+- **About half the reading for the same loss.** With 128-token sequences (32 blocks), a chosen number of blocks reads 24 tokens on average for a loss of 1.458. A fixed 64 tokens scores 1.449, and normal attention 1.418.
+- **Blocks need it most.** With 64-token sequences, a fixed 8 tokens in blocks scores 1.509, against 1.314 for 8 single tokens. A chosen number of blocks brings it back to 1.371.
+- **A minimum size matters; powers of 2 do not.** Letting a query read only 1 or 2 tokens breaks the model (1.566). Any whole number of blocks works about as well as powers of 2 (1.403 vs 1.371, close to the noise).
 - **The rule barely matters.** Top-p, a ratio to the best score and an entropy rule tie.
 
 ## Where it stops working
 
-- From about 10 tokens per query on, a chosen and a fixed number give the same loss.
+- With single tokens instead of blocks, on 64-token sequences, the gain disappears from about 10 tokens per query on.
 - Letting 4 neighbouring queries share one choice breaks lookup tasks (1.713), unless tokens are read in blocks.
-- This is a tiny model with 64-token sequences and 3 seeds per setting (seeds differ by 0.02–0.04). I measured loss, not speed. Whether it holds in large models is a guess.
+- This is a tiny model with sequences of 64 and 128 tokens, blocks of 4 and 3 seeds per setting; runs of one setting differ by up to 0.1. I measured loss, not speed. Whether it holds in large models with blocks of 64 or 128 is a guess.
 
 ## Is this new?
 
-[NSA](https://arxiv.org/abs/2502.11089) reads blocks with a fixed count. [Twilight](https://arxiv.org/abs/2502.02770) and [RTPurbo](https://arxiv.org/abs/2605.16928) let each query choose with top-p, without a minimum or rounding. I found no work on rounding to fixed sizes with a minimum, or on the larger gain with blocks.
+[NSA](https://arxiv.org/abs/2502.11089) reads blocks, with the same count for every query. [Twilight](https://arxiv.org/abs/2502.02770) and [RTPurbo](https://arxiv.org/abs/2605.16928) let each query choose with top-p, over single tokens and without a minimum. I found no work on a per-query count of whole GPU blocks, or on the larger gain it gives with blocks.
 
 ## Setup
 
-A 2-layer transformer (width 64, mixture of experts, Muon) trained for 18 seconds on a MacBook CPU on 8 small tasks, such as next-word prediction, copying and finding a word's partner. [RESULTS.md](RESULTS.md) has every experiment and number, [toy/](toy/) the code, and [chart.py](chart.py) the charts.
+A 2-layer transformer (width 64, mixture of experts, Muon) trained on a MacBook CPU, 18–49 seconds per run, on 8 small tasks such as next-word prediction, copying and finding a word's partner. [RESULTS.md](RESULTS.md) has every experiment and number, [toy/](toy/) the code, and [chart.py](chart.py) the charts.

@@ -136,6 +136,26 @@ Per-task loss, mean of 3 seeds (chosen size):
 
 Tiles without blocks break copying and partner lookup. Why blocks repair this is not tested.
 
+Sizes as any whole number of blocks instead of powers of 2 (`DSA_BUCKETS=4,8,12,...,64`, blocks of 4, chosen size): 1.400, 1.396, 1.412, mean 1.403, reading 7.5 tokens. Powers of 2 score 1.371 at 7.6, so finer sizes give no gain here.
+
+## Step 7: longer sequences, many blocks per token (128 tokens, blocks of 4)
+
+In Steps 1–6 a token reads only about 2 blocks. DeepSeek reads 2,048 tokens, which is 32 blocks of 64. Here sequences are 128 tokens (32 blocks of 4), so a token reads 4 to 16 blocks. The long tasks (finding a partner, counting) fill the longer sequence, so losses are not comparable with Steps 1–6. Each run takes about 49 s.
+
+`env SEQ=128 DSA_K=128 DSA_BLK=4 DSA_P=p DSA_BUCKETS=... ./run.sh SEED`: fixed size = one value in `DSA_BUCKETS`; chosen size = `DSA_BUCKETS=4,8,12,...,128` (any whole number of blocks). Normal attention = `env SEQ=128 DSA_K=128 ./run.sh SEED`.
+
+| size | s0 | s1 | s2 | mean | tokens read |
+|---|---|---|---|---|---|
+| normal attention | 1.435 | 1.415 | 1.402 | 1.418 | 64.6 |
+| fixed 16 (4 blocks) | 1.673 | 1.570 | 1.687 | 1.643 | 15.1 |
+| fixed 32 (8 blocks) | 1.564 | 1.516 | 1.525 | 1.535 | 28.4 |
+| fixed 64 (16 blocks) | 1.482 | 1.438 | 1.426 | 1.449 | 48.8 |
+| chosen, p = 0.5 | 1.597 | 1.560 | 1.562 | 1.573 | 13.6 |
+| chosen, p = 0.7 | 1.496 | 1.452 | 1.427 | 1.458 | 24.2 |
+| chosen, p = 0.85 | 1.472 | 1.419 | 1.437 | 1.443 | 32.1 |
+
+A chosen number of blocks reading 24–32 tokens matches a fixed 64 tokens (1.443–1.458 vs 1.449). Unlike Steps 3–5, the gain does not vanish at larger budgets here: it holds up to at least 16 blocks. Runs of one setting differ by up to 0.12 (fixed 16).
+
 ## Literature
 
 - DeepSeek-V3.2 ([arXiv 2512.02556](https://arxiv.org/abs/2512.02556)): DeepSeek sparse attention. A lightning indexer (ReLU, trained by KL to the dense attention, dense warm-up first) picks a fixed top-k of single tokens per query (2,048 in the released model).
