@@ -4,6 +4,19 @@
 
 ![Fixed vs chosen number of tokens, for single tokens, blocks and blocks + query tiles](main_result.png)
 
+## Contents
+
+- [The core idea](#the-core-idea)
+- [Step 1: how the picker works](#step-1-how-the-picker-works)
+- [Step 2: how the picker learns](#step-2-how-the-picker-learns)
+- [Step 3: let each query choose how many tokens to read](#step-3-let-each-query-choose-how-many-tokens-to-read)
+- [Step 4: which sizes to allow](#step-4-which-sizes-to-allow)
+- [Step 5: which rule picks the size](#step-5-which-rule-picks-the-size)
+- [Step 6: make it GPU-friendly](#step-6-make-it-gpu-friendly)
+- [Where it stops working](#where-it-stops-working)
+- [Is this new?](#is-this-new)
+- [Setup](#setup)
+
 ## The core idea
 
 When a token looks back at earlier tokens, attention reads every one of them and takes a weighted mix. The token doing the looking is called the **query**. For long texts this reading is the slowest part of a language model.
