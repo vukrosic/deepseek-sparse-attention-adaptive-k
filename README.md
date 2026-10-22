@@ -1,4 +1,4 @@
-# DeepSeek sparse attention where each token decides how many tokens to read
+# In DeepSeek sparse attention, let each token decide how many tokens to read
 
 > [!IMPORTANT]
 > **When each token decides how many earlier tokens to read, DeepSeek sparse attention reads about half as many tokens for almost the same quality.**
@@ -53,7 +53,7 @@ This is called **top-p**, like top-p sampling of words.
 
 **Loss** measures how wrong the model's guesses of the next token are. **Lower is better.**
 
-### Letting each token choose how much to read cuts the reading in half, with the same quality
+### Let each token choose how much to read: it reads half as many tokens for the same quality
 
 Texts of 128 tokens, cut into 32 blocks of 4 tokens:
 
@@ -65,7 +65,7 @@ Texts of 128 tokens, cut into 32 blocks of 4 tokens:
 
 > **Less than half the reading, and the loss is only 0.009 higher.** That gap is smaller than the difference between two runs of the same setting.
 
-### Reading in GPU blocks makes DeepSeek's fixed amount worse, and letting each token choose fixes it
+### When reading in GPU blocks, let each token choose, because a fixed amount loses a lot
 
 Reading whole blocks is fast on a GPU, but it **wastes reading**: if a token needs one word, it must also read the 3 words next to it.
 
@@ -79,7 +79,7 @@ Texts of 64 tokens:
 
 > **With blocks, a fixed number loses a lot. Letting each token choose wins most of it back.**
 
-### Each token must read at least 4 tokens, or the model breaks
+### Make every token read at least 4 tokens, or the model breaks
 
 - If a token may read only **1 or 2 tokens**, the model breaks (loss **1.566**).
 - Why: the picker is sometimes sure about the wrong token, and then the token reads nothing useful.
@@ -87,7 +87,7 @@ Texts of 64 tokens:
 
 The sizes **do not need to be powers of 2** (4, 8, 16, 32 and so on). Any whole number of blocks works about as well.
 
-### How each token decides its amount does not matter, only that it decides
+### Use any simple rule for choosing: top-p, ratio and entropy work equally well
 
 I tried three ways to choose:
 
@@ -101,18 +101,18 @@ I tried three ways to choose:
 
 ## Where it stops working
 
-### Without blocks, letting each token choose helps only when tokens read very little
+### Without blocks, let tokens choose only when they read very little
 
 When a token reads single tokens instead of blocks, choosing helps only **under about 10 of 64 tokens**. Above that, the same number for every token does just as well.
 
-### Making 4 neighbouring tokens read the same tokens breaks the model, unless reading is in blocks
+### Do not make 4 neighbouring tokens read the same tokens, unless reading is in blocks
 
 GPUs also like to process 4 neighbouring tokens together, so I let **4 neighbours share one choice** of what to read.
 
 - **Without blocks, this breaks the model** (loss 1.713). One token needs a word far back, its 3 neighbours want other words, and the shared choice serves none of them well.
 - **With blocks, sharing costs almost nothing.**
 
-### Tested only on a tiny model
+### Test it on a large model before relying on it
 
 > [!WARNING]
 > - Tiny model, texts of 64 and 128 tokens, blocks of 4 tokens.
