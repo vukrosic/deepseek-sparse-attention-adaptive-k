@@ -101,6 +101,8 @@ For each minimum I asked: **how much lower is the loss than DeepSeek's fixed amo
 | 256 | 8 | 3% | 0.15 |
 | 512 | **32** | 6% | **0.29** |
 
+![For each context length, how much each minimum beats DeepSeek's fixed amount; the best minimum moves right as texts get longer](minimum_by_length.png)
+
 ![The best minimum grows with the context length](minimum_scaling.png)
 
 > **Each time the context doubles, the best minimum about doubles: it stays near 1/24 of the context (3–6%).** A smaller minimum lets tokens skip what they need; a larger one wastes reading.

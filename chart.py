@@ -162,4 +162,29 @@ ax.set_xticks(xs); ax.set_xticklabels([str(x) for x in xs]); ax.set_yticks([1, 2
 ax.set_ylim(1, 160); ax.set_xlabel("context length (tokens)"); ax.set_ylabel("best minimum tokens read")
 ax.legend(loc="upper left", fontsize=10)
 fig.savefig("minimum_scaling.png", dpi=170); plt.close(fig)
-print("wrote main_result.png rules.png sizes.png picker_training.png blocks_long.png minimum_scaling.png")
+# 7. gain over DeepSeek's fixed amount for each minimum, one line per context length (RESULTS.md step 8)
+GAIN = {32: [(1, -0.269), (2, 0.029), (4, 0.028), (8, 0.006)],
+        64: [(1, -0.088), (2, 0.078), (4, 0.050), (8, 0.019)],
+        128: [(1, 0.033), (2, 0.063), (4, 0.089), (8, 0.076)],
+        256: [(1, -0.008), (2, 0.090), (4, 0.096), (8, 0.151), (16, 0.028)],
+        512: [(8, -0.004), (16, 0.058), (32, 0.294), (64, -0.002)]}
+SEQ_COL = {32: "#9ec5ef", 64: "#6aa6e4", 128: "#2a78d6", 256: "#1b559c", 512: "#0d2f5c"}   # light = short, dark = long
+fig, ax = plt.subplots(figsize=(11.5, 6.6))
+fig.subplots_adjust(left=0.09, right=0.9, top=0.82, bottom=0.2)
+frame(fig, "Longer texts need a larger minimum: the best one moves right as the context grows",
+      "How much lower the loss is than DeepSeek's fixed amount reading as many tokens. Higher is better. Big dot = best minimum.",
+      "Each token chooses how much to read, but never less than the minimum. Single tokens, 2 runs (512 tokens: 1 run for the fixed amounts).\n"
+      "Below 0 = worse than DeepSeek's fixed amount: a too-small minimum lets tokens miss the word they need; a too-large one wastes reading.")
+ax.axhline(0, color=GRAY, lw=1.5, ls="--")
+ax.text(17, -0.015, "same as DeepSeek's fixed amount", ha="left", va="top", fontsize=10, color=INK2)
+for L, pts in GAIN.items():
+    c = SEQ_COL[L]; xs, ys = [a for a, _ in pts], [b for _, b in pts]
+    ax.plot(xs, ys, color=c, lw=2, marker="o", ms=6)
+    bx, by = max(pts, key=lambda q: q[1]); ax.plot(bx, by, "o", ms=13, color=c, mec="white", mew=2)
+    i, dy = (0, -9) if L in (32, 64) else (-1, -12 if L == 512 else 0)   # 32 and 64 labelled at their left end, clear of the others
+    ax.annotate(f"{L} tokens", (xs[i], ys[i]), textcoords="offset points", xytext=(9, dy), va="center", fontsize=10.5, color=INK)
+ax.set_xscale("log", base=2); ax.set_xticks([1, 2, 4, 8, 16, 32, 64]); ax.set_xticklabels(["1", "2", "4", "8", "16", "32", "64"])
+ax.set_xlim(0.8, 100); ax.set_ylim(-0.3, 0.33)
+ax.set_xlabel("minimum tokens each token must read"); ax.set_ylabel("loss below DeepSeek's fixed amount")
+fig.savefig("minimum_by_length.png", dpi=170); plt.close(fig)
+print("wrote main_result.png rules.png sizes.png picker_training.png blocks_long.png minimum_scaling.png minimum_by_length.png")
