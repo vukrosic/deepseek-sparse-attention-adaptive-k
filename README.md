@@ -128,6 +128,37 @@ I tried three ways to choose:
 
 > **All three gave about the same results.** What matters is that each token chooses, not how.
 
+### Train the picker to copy where attention looks, not on the model's own loss, or its scores all fall to 0
+
+There are two ways to teach the picker which tokens matter:
+
+- **Copy (DeepSeek's way):** the picker learns to give high scores where the real attention looks.
+- **Task:** the picker's scores are added to the attention scores, so the model's own next-token loss trains it directly. This sounds more direct.
+
+Texts of 64 tokens, each token reads 8 (same number for every token):
+
+| How the picker is trained | Loss |
+|---|---|
+| **Copy where attention looks (DeepSeek)** | **1.314** |
+| Copy, plus the model's loss, every step | 1.394 |
+| Copy during warm-up, then the model's loss only | 2.292 |
+| The model's loss only | 2.532 (much worse) |
+
+![Training the picker to copy the attention beats training it on the model's loss](picker_training.png)
+
+Why the model's loss fails. The picker's score for each token passes through a **ReLU**: negative scores become 0.
+
+1. The model's loss reaches only the 8 tokens the picker chose, and for most of them it says **"this one did not help, score it lower"**.
+2. Scores keep going down until they drop below 0, where the ReLU turns them into exactly 0.
+3. A score at 0 gets **no more training signal**, so it can never come back up.
+4. In the end **every score in the second layer is 0** (with copy, about 17 tokens per query score above 0). All tokens tie, so the picker chooses at random.
+
+Copying works because it gives every token a **target score** from the attention, so the picker always knows where to point, not only what to push down.
+
+> **Train the picker by copying the attention. Training it on the model's loss pushes all its scores to 0, and it picks tokens at random.**
+
+The cause in steps 1–3 is my reading of the measurements (all scores at 0, losses above), not a proof.
+
 ---
 
 ## Where it stops working
