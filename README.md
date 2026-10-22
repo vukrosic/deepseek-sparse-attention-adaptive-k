@@ -79,11 +79,11 @@ Texts of 64 tokens:
 
 > **With blocks, a fixed number loses a lot. Letting each token choose wins most of it back.**
 
-### Make every token read at least 4 tokens, or the model breaks
+### There is a minimum number of tokens each token must read, or the model breaks
 
 - If a token may read only **1 or 2 tokens**, the model breaks (loss **1.566**).
 - Why: the picker is sometimes sure about the wrong token, and then the token reads nothing useful.
-- **A minimum of 4 tokens fixes this.**
+- **In this tiny model, a minimum of 4 tokens fixes this.** Large models will likely need their own minimum, probably one or two GPU blocks.
 
 The sizes **do not need to be powers of 2** (4, 8, 16, 32 and so on). Any whole number of blocks works about as well.
 
