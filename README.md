@@ -4,15 +4,17 @@
 
 ![Fixed vs chosen number of tokens, for single tokens, blocks and blocks + query tiles](main_result.png)
 
-## The idea
+## The core idea
 
-In attention, each token (the **query**) looks back at all earlier tokens and takes a weighted mix of them. For long texts this is the slowest part of a language model, because every token reads every earlier token.
+When a token looks back at earlier tokens, attention reads every one of them and takes a weighted mix. The token doing the looking is called the **query**. For long texts this reading is the slowest part of a language model.
 
-**DeepSeek sparse attention** ([DeepSeek-V3.2](https://arxiv.org/abs/2512.02556)) makes this cheaper. A small, fast network called the **picker** (DeepSeek calls it the lightning indexer) scores every earlier token. Attention then reads only the top-k tokens by score: 2,048 in DeepSeek's model, the same number for every query.
+**DeepSeek sparse attention** ([DeepSeek-V3.2](https://arxiv.org/abs/2512.02556)) reads only some of the earlier tokens. A small, fast network called the **picker** (DeepSeek calls it the lightning indexer) gives every earlier token a score.
+
+Attention then reads only the **top-k**: the k tokens with the highest scores. DeepSeek uses k = 2,048, the same number for every query.
 
 But queries need different amounts. A token that continues a common phrase needs the last word or two. A token that answers a question about something said far back must search a lot of text.
 
-So I asked: what if each query chooses how many tokens to read? And can that choice still be fast on a GPU?
+My question: if each query decides how many tokens to read, does the model do better for the same amount of reading, and can it still run fast on a GPU?
 
 ## Step 1: how the picker works
 
