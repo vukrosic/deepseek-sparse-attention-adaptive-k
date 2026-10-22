@@ -53,7 +53,7 @@ This is called **top-p**, like top-p sampling of words.
 
 **Loss** measures how wrong the model's guesses of the next token are. **Lower is better.**
 
-### Choosing reads half as many tokens as a fixed number, with the same quality
+### Letting each token choose how much to read cuts the reading in half, with the same quality
 
 Texts of 128 tokens, cut into 32 blocks of 4 tokens:
 
@@ -65,7 +65,7 @@ Texts of 128 tokens, cut into 32 blocks of 4 tokens:
 
 > **Less than half the reading, and the loss is only 0.009 higher.** That gap is smaller than the difference between two runs of the same setting.
 
-### Reading in blocks hurts a fixed number, and choosing fixes it
+### Reading in GPU blocks makes DeepSeek's fixed amount worse, and letting each token choose fixes it
 
 Reading whole blocks is fast on a GPU, but it **wastes reading**: if a token needs one word, it must also read the 3 words next to it.
 
@@ -101,7 +101,7 @@ I tried three ways to choose:
 
 ## Where it stops working
 
-### Without blocks, choosing helps only when tokens read very little
+### Without blocks, letting each token choose helps only when tokens read very little
 
 When a token reads single tokens instead of blocks, choosing helps only **under about 10 of 64 tokens**. Above that, the same number for every token does just as well.
 

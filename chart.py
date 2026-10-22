@@ -124,7 +124,7 @@ LONG_FIXED = [(15.1, 1.643), (28.4, 1.535), (48.8, 1.449)]       # fixed 16, 32,
 LONG_CHOSEN = [(13.6, 1.573), (24.2, 1.458), (32.1, 1.443)]      # p = 0.5, 0.7, 0.85; any whole number of blocks
 fig, ax = plt.subplots(figsize=(11.5, 6.4))
 fig.subplots_adjust(left=0.08, right=0.98, top=0.82, bottom=0.2)
-frame(fig, "Reading whole blocks, a chosen number reads about half as many tokens for the same loss",
+frame(fig, "Letting each token choose how much to read cuts the reading in half, with the same loss",
       "DeepSeek sparse attention, sequences of 128 tokens = 32 blocks of 4. Mean of 3 runs; runs of one setting differ by up to about 0.1.",
       "Same number: every token reads 4, 8 or 16 blocks. Each token chooses: it keeps the top blocks that hold a share p of its picker's attention,\n"
       "any whole number of blocks. Real GPU kernels read blocks of 64 or 128 tokens; blocks of 4 stand in for them in this small model.")
