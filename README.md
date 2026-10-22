@@ -1,4 +1,4 @@
-# Per-query token budgets for DeepSeek sparse attention
+# DeepSeek sparse attention where each token decides how many tokens to read
 
 **DeepSeek sparse attention lets each token read only a fixed number of earlier tokens, chosen by a small learned picker. I let each token choose its own number instead, rounded up to 4, 8, 16, 32 or 64 so GPU kernels still see fixed sizes. When tokens are read in GPU-friendly blocks, this works much better than one fixed number: reading 7.6 tokens on average, it gets close to the loss of a fixed 16.**
 
